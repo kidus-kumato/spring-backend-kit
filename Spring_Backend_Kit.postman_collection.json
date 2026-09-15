@@ -1,0 +1,1189 @@
+{
+  "info": {
+    "_postman_id": "73c4d7b2-dcbc-4f20-862b-b8350ce42910",
+    "name": "Spring Backend Kit API",
+    "description": "Postman collection for the Spring Backend Kit REST API.\n\n## Quick start\n1. Start the stack with `docker compose up --build`.\n2. Import this collection into Postman.\n3. Run **Register User**. The request generates a unique `userEmail` when `generateNewUserEmail` is `true`.\n4. Read the verification token from `docker compose logs spring-backend`, then set the collection variable `verificationToken`.\n5. Run **Verify Email**, followed by **Login**. Login automatically stores `accessToken` and `refreshToken`.\n6. Run the profile, token, and observability requests as needed.\n\nFor password recovery, run **Forgot Password**, copy the reset token from the same service logs into `resetToken`, then run **Reset Password**.\n\nThe default registered account has the `USER` role. To test a successful admin request, authenticate with an account that has the `ADMIN` role and set `adminAccessToken`. The collection also contains an RBAC denial test that uses the normal user token.\n\nRequests send an `X-Request-Id` value and collection-level tests verify that the server echoes it. Destructive requests, such as profile deletion and logout, are grouped separately and run only when explicitly sent.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.variables.set('requestId', `postman-${Date.now()}-${Math.random().toString(16).slice(2)}`);"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "pm.test('X-Request-Id response header is present', function () {",
+          "    const requestId = pm.response.headers.get('X-Request-Id');",
+          "    pm.expect(requestId).to.be.a('string').and.not.empty;",
+          "});"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "generateNewUserEmail",
+      "value": "true",
+      "type": "string"
+    },
+    {
+      "key": "userEmail",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userPassword",
+      "value": "StrongPassword123!",
+      "type": "secret"
+    },
+    {
+      "key": "newPassword",
+      "value": "NewStrongPassword456!",
+      "type": "secret"
+    },
+    {
+      "key": "verificationToken",
+      "value": "",
+      "type": "secret"
+    },
+    {
+      "key": "resetToken",
+      "value": "",
+      "type": "secret"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "secret"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "secret"
+    },
+    {
+      "key": "adminAccessToken",
+      "value": "",
+      "type": "secret"
+    },
+    {
+      "key": "profileFirstName",
+      "value": "John",
+      "type": "string"
+    },
+    {
+      "key": "profileLastName",
+      "value": "Doe",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "00 - Platform",
+      "description": "Public health and OpenAPI endpoints. Prometheus metrics require a valid user access token.",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Application reports UP', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql('UP');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "health"]
+            },
+            "description": "Returns Spring Boot Actuator health. PostgreSQL and Redis must be available for an UP response."
+          },
+          "response": []
+        },
+        {
+          "name": "OpenAPI Specification",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response is an OpenAPI document', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.openapi).to.be.a('string');",
+                  "    pm.expect(json.paths).to.be.an('object');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/v3/api-docs",
+              "host": ["{{baseUrl}}"],
+              "path": ["v3", "api-docs"]
+            },
+            "description": "Downloads the generated OpenAPI JSON document."
+          },
+          "response": []
+        },
+        {
+          "name": "Prometheus Metrics",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Metrics payload is not empty', function () { pm.expect(pm.response.text()).to.not.be.empty; });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/actuator/prometheus",
+              "host": ["{{baseUrl}}"],
+              "path": ["actuator", "prometheus"]
+            },
+            "description": "Returns Prometheus metrics. Run Login first so `accessToken` is populated."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "01 - Registration and Login",
+      "description": "Creates and verifies a user, then logs in. Verification requires copying the local-development token from `docker compose logs spring-backend` into `verificationToken`.",
+      "item": [
+        {
+          "name": "Register User",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const generate = pm.collectionVariables.get('generateNewUserEmail') === 'true';",
+                  "const current = pm.collectionVariables.get('userEmail');",
+                  "if (generate || !current) {",
+                  "    const email = `postman-${Date.now()}-${Math.floor(Math.random() * 100000)}@example.com`;",
+                  "    pm.collectionVariables.set('userEmail', email);",
+                  "    pm.collectionVariables.set('generateNewUserEmail', 'false');",
+                  "    console.log(`Generated collection userEmail: ${email}`);",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('Registration message is returned', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.message).to.include('Registration successful');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "register"]
+            },
+            "description": "Registers a pending user. Set `generateNewUserEmail` to `true` before resending if you want another unique account. The verification token is written to the `spring-backend` service logs."
+          },
+          "response": []
+        },
+        {
+          "name": "Resend Verification",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Generic response does not disclose account state', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.message).to.include('If an account requires verification');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/resend-verification",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "resend-verification"]
+            },
+            "description": "Generates a fresh verification token for a pending user. Copy the newest token from the application logs into `verificationToken`."
+          },
+          "response": []
+        },
+        {
+          "name": "Verify Email",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('verificationToken')) {",
+                  "    console.warn('Set collection variable verificationToken from: docker compose logs spring-backend');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 204', function () { pm.response.to.have.status(204); });",
+                  "if (pm.response.code === 204) { pm.collectionVariables.set('verificationToken', ''); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{verificationToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/verify-email",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "verify-email"]
+            },
+            "description": "Activates the account with the single-use verification token copied from local application logs."
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Bearer token pair is returned', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.accessToken).to.be.a('string').and.not.empty;",
+                  "    pm.expect(json.refreshToken).to.be.a('string').and.not.empty;",
+                  "    pm.expect(json.tokenType).to.eql('Bearer');",
+                  "    pm.expect(json.expiresIn).to.be.a('number');",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', json.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "Authenticates a verified active user. Successful responses automatically populate `accessToken` and `refreshToken`."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02 - User Profile",
+      "description": "Authenticated self-service user endpoints. Run Login first.",
+      "item": [
+        {
+          "name": "Get My Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Profile contains public user fields', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.id).to.be.a('string');",
+                  "    pm.expect(json.email).to.eql(pm.collectionVariables.get('userEmail'));",
+                  "    pm.expect(json.roles).to.be.an('array').and.to.include('USER');",
+                  "    pm.expect(json.status).to.eql('ACTIVE');",
+                  "    pm.expect(json).to.not.have.property('passwordHash');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "me"]
+            },
+            "description": "Returns the authenticated user's safe profile representation."
+          },
+          "response": []
+        },
+        {
+          "name": "Update My Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Profile names are updated', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.firstName).to.eql(pm.collectionVariables.get('profileFirstName'));",
+                  "    pm.expect(json.lastName).to.eql(pm.collectionVariables.get('profileLastName'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"{{profileFirstName}}\",\n  \"lastName\": \"{{profileLastName}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "me"]
+            },
+            "description": "Updates first and last name for the authenticated user."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03 - Token Lifecycle",
+      "description": "Exercises rotating refresh tokens and logout. Logout revokes the current refresh token and clears local collection token values.",
+      "item": [
+        {
+          "name": "Refresh Access Token",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.variables.set('previousRefreshToken', pm.collectionVariables.get('refreshToken'));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Refresh token rotates', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.accessToken).to.be.a('string').and.not.empty;",
+                  "    pm.expect(json.refreshToken).to.be.a('string').and.not.empty;",
+                  "    pm.expect(json.refreshToken).to.not.eql(pm.variables.get('previousRefreshToken'));",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', json.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "refresh"]
+            },
+            "description": "Rotates the current refresh token and stores the returned access/refresh pair."
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 204', function () { pm.response.to.have.status(204); });",
+                  "if (pm.response.code === 204) {",
+                  "    pm.collectionVariables.set('accessToken', '');",
+                  "    pm.collectionVariables.set('refreshToken', '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "logout"]
+            },
+            "description": "Revokes the supplied refresh token. Run this only when you are ready to end the current collection session."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04 - Password Recovery",
+      "description": "Password recovery flow. The local reset token is emitted to application logs and must be copied into `resetToken`.",
+      "item": [
+        {
+          "name": "Forgot Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Generic response prevents account enumeration', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.message).to.include('If an account exists');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/forgot-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "forgot-password"]
+            },
+            "description": "Requests password recovery without revealing whether the email exists. Copy the emitted token to `resetToken`."
+          },
+          "response": []
+        },
+        {
+          "name": "Reset Password",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('resetToken')) {",
+                  "    console.warn('Set collection variable resetToken from: docker compose logs spring-backend');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 204', function () { pm.response.to.have.status(204); });",
+                  "if (pm.response.code === 204) {",
+                  "    pm.collectionVariables.set('userPassword', pm.collectionVariables.get('newPassword'));",
+                  "    pm.collectionVariables.set('resetToken', '');",
+                  "    pm.collectionVariables.set('accessToken', '');",
+                  "    pm.collectionVariables.set('refreshToken', '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{resetToken}}\",\n  \"newPassword\": \"{{newPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/reset-password",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "reset-password"]
+            },
+            "description": "Consumes the single-use reset token, changes the password, revokes all refresh sessions, and updates `userPassword` for subsequent Login requests."
+          },
+          "response": []
+        },
+        {
+          "name": "Login After Password Reset",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) {",
+                  "    const json = pm.response.json();",
+                  "    pm.collectionVariables.set('accessToken', json.accessToken);",
+                  "    pm.collectionVariables.set('refreshToken', json.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"{{userPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "Verifies the newly reset password and saves a fresh token pair."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "05 - Admin and RBAC",
+      "description": "Tests method-level ADMIN authorization. New registrations have only the USER role, so a separate admin token is needed for the successful listing request.",
+      "item": [
+        {
+          "name": "List Users - Forbidden for USER",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 403', function () { pm.response.to.have.status(403); });",
+                  "pm.test('Error identifies forbidden access', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql(403);",
+                  "    pm.expect(json.code).to.eql('FORBIDDEN');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users?page=0&size=20&sort=createdAt,desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "users"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                },
+                {
+                  "key": "sort",
+                  "value": "createdAt,desc"
+                }
+              ]
+            },
+            "description": "Confirms that a normal USER cannot access the admin user listing."
+          },
+          "response": []
+        },
+        {
+          "name": "List Users - ADMIN",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Paginated user list is returned', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.content).to.be.an('array');",
+                  "    pm.expect(json.page).to.be.a('number');",
+                  "    pm.expect(json.size).to.be.a('number');",
+                  "    pm.expect(json.totalElements).to.be.a('number');",
+                  "    pm.expect(json.totalPages).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{adminAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users?page=0&size=20&sort=createdAt,desc",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "users"],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                },
+                {
+                  "key": "sort",
+                  "value": "createdAt,desc"
+                }
+              ]
+            },
+            "description": "Lists users with pagination and allow-listed sorting. Set `adminAccessToken` to a token issued for an ADMIN account."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "06 - Negative Validation",
+      "description": "Focused negative cases for the shared error envelope. These requests intentionally return client errors.",
+      "item": [
+        {
+          "name": "Register with Invalid Input",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('Validation error envelope is consistent', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql(400);",
+                  "    pm.expect(json.code).to.eql('VALIDATION_ERROR');",
+                  "    pm.expect(json.path).to.eql('/api/v1/auth/register');",
+                  "    pm.expect(json.traceId).to.be.a('string').and.not.empty;",
+                  "    pm.expect(json.errors).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"not-an-email\",\n  \"password\": \"short\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "register"]
+            },
+            "description": "Verifies field validation and the standard API error shape."
+          },
+          "response": []
+        },
+        {
+          "name": "Login with Wrong Password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 401', function () { pm.response.to.have.status(401); });",
+                  "pm.test('Authentication failure is generic', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql(401);",
+                  "    pm.expect(json.code).to.eql('AUTHENTICATION_FAILED');",
+                  "    pm.expect(json.message).to.eql('Authentication failed');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{userEmail}}\",\n  \"password\": \"DefinitelyWrongPassword!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            },
+            "description": "Verifies that bad credentials return a generic 401 response. Repeated sends count toward temporary account lockout."
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh with Invalid Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 401', function () { pm.response.to.have.status(401); });",
+                  "pm.test('Invalid refresh token is rejected', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.code).to.eql('INVALID_REFRESH_TOKEN');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"invalid-refresh-token\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "refresh"]
+            },
+            "description": "Verifies rejection of an unknown refresh token."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "99 - Destructive Cleanup",
+      "description": "Requests that alter or end the current test account/session. Run these explicitly, not as part of initial setup.",
+      "item": [
+        {
+          "name": "Delete My Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 204', function () { pm.response.to.have.status(204); });",
+                  "if (pm.response.code === 204) {",
+                  "    pm.collectionVariables.set('accessToken', '');",
+                  "    pm.collectionVariables.set('refreshToken', '');",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-Request-Id",
+                "value": "{{requestId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "users", "me"]
+            },
+            "description": "Soft-deletes the authenticated account by setting its status to INACTIVE, then clears local token variables."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
